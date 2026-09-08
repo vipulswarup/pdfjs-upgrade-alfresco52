@@ -1,0 +1,50 @@
+# Maven
+target/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+buildNumber.properties
+.mvn/timing.properties
+.mvn/wrapper/maven-wrapper.jar
+
+# Alfresco SDK 3 local runtime
+alf_data_dev/
+*.log
+
+# Build artifacts outside target (should not be committed)
+*.amp
+*.war
+*.ear
+
+# IDE
+.idea/
+*.iws
+*.iml
+*.ipr
+.project
+.classpath
+.settings/
+.springBeans
+.factorypath
+.vscode/
+*.code-workspace
+nbproject/
+nb-configuration.xml
+.nb-gradle/
+*.swp
+*~
+
+# JRebel (generated)
+**/rebel.xml
+
+# OS
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Compiled
+*.class
