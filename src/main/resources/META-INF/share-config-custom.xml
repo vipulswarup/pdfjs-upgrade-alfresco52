@@ -1,0 +1,9 @@
+<alfresco-config>
+    <!--
+        Set enabled to false to keep this AMP installed but fall back to Alfresco 5.2's
+        bundled PdfJs previewer for application/pdf. Restart Share after changing.
+    -->
+    <config evaluator="string-compare" condition="pdfjs-upgrade-alfresco52-share-amp">
+        <enabled>true</enabled>
+    </config>
+</alfresco-config>

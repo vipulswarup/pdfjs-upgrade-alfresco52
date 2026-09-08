@@ -1,0 +1,16 @@
+<extension>
+    <modules>
+        <module>
+            <id>pdfjs-upgrade-alfresco52-share-amp</id>
+            <version>1.0.0</version>
+            <auto-deploy>true</auto-deploy>
+            <description>Replace Alfresco Share application/pdf preview with Mozilla PDF.js</description>
+            <customizations>
+                <customization>
+                    <targetPackageRoot>org.alfresco.components.preview</targetPackageRoot>
+                    <sourcePackageRoot>com.eisenvault.components.preview</sourcePackageRoot>
+                </customization>
+            </customizations>
+        </module>
+    </modules>
+</extension>
