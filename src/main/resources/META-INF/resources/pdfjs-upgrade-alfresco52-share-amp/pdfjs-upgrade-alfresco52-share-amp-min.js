@@ -62,6 +62,10 @@
 
          var html = "";
          html += '<div class="pdfjs-upgrade-alfresco52-share-amp-preview">';
+         if (access.allowEdit)
+         {
+            html += this._actionsBarMarkup();
+         }
          html += '<iframe class="pdfjs-upgrade-alfresco52-share-amp-frame" src="about:blank"';
          html += ' title="' + $html(this.wp.options.name || "PDF") + '"';
          html += ' style="height:' + heightPx + 'px;">';
@@ -72,6 +76,15 @@
          previewerEl.innerHTML = html;
          this._bindIframe(previewerEl, viewerUrl, access);
          return null;
+      },
+
+      _actionsBarMarkup: function PdfjsUpgradeAlfresco52__actionsBarMarkup()
+      {
+         var html = '<div class="pdfjs-upgrade-alfresco52-share-amp-actions">';
+         html += '<button type="button" class="pdfjs-upgrade-alfresco52-share-amp-save-version">';
+         html += $html(this.wp.msg("pdfjs.upgrade.saveVersion.button"));
+         html += "</button></div>";
+         return html;
       },
 
       _fallbackMarkup: function PdfjsUpgradeAlfresco52__fallbackMarkup(hidden, allowDownload)
@@ -98,6 +111,8 @@
          {
             return;
          }
+
+         this._bindSaveVersion(container, iframe);
 
          var applyAccess = function(ev)
          {
@@ -129,6 +144,205 @@
          });
 
          iframe.src = viewerUrl;
+      },
+
+      _bindSaveVersion: function PdfjsUpgradeAlfresco52__bindSaveVersion(container, iframe)
+      {
+         var me = this;
+         var button = YAHOO.util.Dom.getElementsByClassName("pdfjs-upgrade-alfresco52-share-amp-save-version", "button", container)[0];
+         if (!button)
+         {
+            return;
+         }
+         YAHOO.util.Event.addListener(button, "click", function()
+         {
+            me._onSaveVersion(iframe, button);
+         });
+      },
+
+      _onSaveVersion: function PdfjsUpgradeAlfresco52__onSaveVersion(iframe, button)
+      {
+         var me = this;
+         var app;
+         if (button.disabled)
+         {
+            return;
+         }
+         app = iframe.contentWindow && iframe.contentWindow.PDFViewerApplication;
+         if (!app || !app.pdfDocument || !app.pdfDocument.saveDocument)
+         {
+            this._notify(this.wp.msg("pdfjs.upgrade.saveVersion.notReady"));
+            return;
+         }
+
+         this._setSaveBusy(button, true);
+         this._commitCurrentEditing(app);
+         app.pdfDocument.saveDocument().then(function(data)
+         {
+            return me._uploadNewVersion(data);
+         }).then(function()
+         {
+            me._setSaveBusy(button, false);
+            me._notify(me.wp.msg("pdfjs.upgrade.saveVersion.success"));
+            me._refreshAfterSave();
+         }, function(err)
+         {
+            me._setSaveBusy(button, false);
+            me._notify(me._saveErrorMessage(err));
+         });
+      },
+
+      _commitCurrentEditing: function PdfjsUpgradeAlfresco52__commitCurrentEditing(app)
+      {
+         var viewer = app.pdfViewer;
+         var manager = viewer && viewer._layerProperties ? viewer._layerProperties.annotationEditorUIManager : null;
+         if (manager && manager.endCurrentEditing)
+         {
+            manager.endCurrentEditing();
+         }
+      },
+
+      _uploadNewVersion: function PdfjsUpgradeAlfresco52__uploadNewVersion(data)
+      {
+         var me = this;
+         return new Promise(function(resolve, reject)
+         {
+            var filename = me.wp.options.name || "document.pdf";
+            var nodeRef = me.wp.options.nodeRef;
+            var blob, formData, xhr;
+            if (!nodeRef)
+            {
+               reject(new Error("missing-noderef"));
+               return;
+            }
+            blob = new Blob([data], { type: "application/pdf" });
+            formData = new FormData();
+            formData.append("filedata", blob, filename);
+            formData.append("filename", filename);
+            formData.append("updateNodeRef", nodeRef);
+            formData.append("majorVersion", "false");
+            formData.append("overwrite", "true");
+            formData.append("description", me.wp.msg("pdfjs.upgrade.saveVersion.comment"));
+
+            xhr = new XMLHttpRequest();
+            xhr.open("POST", Alfresco.constants.PROXY_URI + "api/upload");
+            me._applyCsrf(xhr, formData);
+            xhr.onreadystatechange = function()
+            {
+               if (xhr.readyState !== 4)
+               {
+                  return;
+               }
+               if (me._isUploadSuccess(xhr))
+               {
+                  resolve();
+                  return;
+               }
+               reject(xhr);
+            };
+            xhr.onerror = function()
+            {
+               reject(xhr);
+            };
+            xhr.send(formData);
+         });
+      },
+
+      _applyCsrf: function PdfjsUpgradeAlfresco52__applyCsrf(xhr, formData)
+      {
+         var policy = Alfresco.util.CSRFPolicy;
+         var header, parameter, token;
+         if (!policy)
+         {
+            return;
+         }
+         if (policy.isFilterEnabled && !policy.isFilterEnabled())
+         {
+            return;
+         }
+         token = policy.getToken ? policy.getToken() : null;
+         if (!token)
+         {
+            return;
+         }
+         header = policy.getHeader ? policy.getHeader() : "Alfresco-CSRFToken";
+         parameter = policy.getParameter ? policy.getParameter() : header;
+         xhr.setRequestHeader(header, token);
+         formData.append(parameter, token);
+      },
+
+      _isUploadSuccess: function PdfjsUpgradeAlfresco52__isUploadSuccess(xhr)
+      {
+         var json;
+         if (xhr.status < 200 || xhr.status >= 300)
+         {
+            return false;
+         }
+         try
+         {
+            json = xhr.responseText ? JSON.parse(xhr.responseText) : null;
+            if (json && json.status && typeof json.status.code !== "undefined")
+            {
+               return json.status.code >= 200 && json.status.code < 300;
+            }
+         }
+         catch (e) {}
+         return true;
+      },
+
+      _saveErrorMessage: function PdfjsUpgradeAlfresco52__saveErrorMessage(err)
+      {
+         var text = "";
+         if (err && err.responseText)
+         {
+            try
+            {
+               var json = JSON.parse(err.responseText);
+               text = json.message || (json.status && json.status.description) || "";
+            }
+            catch (e)
+            {
+               text = String(err.responseText);
+            }
+         }
+         else if (err && err.message)
+         {
+            text = err.message;
+         }
+         var lower = String(text).toLowerCase();
+         if (lower.indexOf("lock") !== -1 || lower.indexOf("checked out") !== -1)
+         {
+            return this.wp.msg("pdfjs.upgrade.saveVersion.locked");
+         }
+         if (lower.indexOf("access") !== -1 || lower.indexOf("permission") !== -1 || String(err && err.status) === "403")
+         {
+            return this.wp.msg("pdfjs.upgrade.saveVersion.denied");
+         }
+         return this.wp.msg("pdfjs.upgrade.saveVersion.failure");
+      },
+
+      _setSaveBusy: function PdfjsUpgradeAlfresco52__setSaveBusy(button, busy)
+      {
+         button.disabled = !!busy;
+         button.innerHTML = $html(this.wp.msg(busy ? "pdfjs.upgrade.saveVersion.busy" : "pdfjs.upgrade.saveVersion.button"));
+      },
+
+      _notify: function PdfjsUpgradeAlfresco52__notify(text)
+      {
+         if (Alfresco.util.PopupManager && Alfresco.util.PopupManager.displayMessage)
+         {
+            Alfresco.util.PopupManager.displayMessage({
+               text: text
+            });
+            return;
+         }
+         window.alert(text);
+      },
+
+      _refreshAfterSave: function PdfjsUpgradeAlfresco52__refreshAfterSave()
+      {
+         YAHOO.Bubbling.fire("metadataRefresh");
+         YAHOO.Bubbling.fire("previewChangedEvent");
       },
 
       _applyViewerAccess: function PdfjsUpgradeAlfresco52__applyViewerAccess(appOptions, access)
