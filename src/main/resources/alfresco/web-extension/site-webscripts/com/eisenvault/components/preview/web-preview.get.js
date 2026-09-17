@@ -65,4 +65,68 @@ function pdfjsUpgradeAlfresco52PrependPlugin()
    }
 }
 
+function pdfjsUpgradeAlfresco52CopyUserPermissions(user)
+{
+   var copy = {}, key;
+   if (!user)
+   {
+      return null;
+   }
+   for (key in user)
+   {
+      copy[key] = (user[key] === true || String(user[key]).toLowerCase() === "true");
+   }
+   return copy;
+}
+
+function pdfjsUpgradeAlfresco52LoadUserPermissions(nodeRef)
+{
+   if (!nodeRef)
+   {
+      return null;
+   }
+   try
+   {
+      var uri = "/slingshot/doclib2/node/" + String(nodeRef).replace("://", "/");
+      var result = remote.connect("alfresco").get(uri);
+      if (result.status != 200)
+      {
+         return null;
+      }
+      var data = jsonUtils.toObject(result.response);
+      var user = data && data.item && data.item.node && data.item.node.permissions
+         ? data.item.node.permissions.user
+         : null;
+      return pdfjsUpgradeAlfresco52CopyUserPermissions(user);
+   }
+   catch (e)
+   {
+      return null;
+   }
+}
+
+function pdfjsUpgradeAlfresco52AttachPermissions()
+{
+   if (!model.widgets || !pdfjsUpgradeAlfresco52IsEnabled())
+   {
+      return;
+   }
+
+   var perms = pdfjsUpgradeAlfresco52LoadUserPermissions(model.nodeRef);
+   if (!perms)
+   {
+      return;
+   }
+
+   for (var i = 0; i < model.widgets.length; i++)
+   {
+      var widget = model.widgets[i];
+      if (widget.id == "WebPreview" && widget.options)
+      {
+         widget.options.userPermissions = perms;
+      }
+   }
+}
+
 pdfjsUpgradeAlfresco52PrependPlugin();
+pdfjsUpgradeAlfresco52AttachPermissions();
